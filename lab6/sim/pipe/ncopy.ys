@@ -1,0 +1,497 @@
+#/* $begin ncopy-ys */
+##################################################################
+# ncopy.ys - Copy a src block of len words to dst.
+# Return the number of positive words (>0) contained in src.
+#
+# Include your name and ID here.
+#
+# Describe how and why you modified the baseline code.
+#
+# First of all, to decrease CPE, there is no disputing that 'iaddq'
+# works well. Thus we need not to load immediate number beforehand,
+# and instruction 'sub' can be replaced by 'iaddq' as well.
+# Second, try to unroll the loop. We previously load a number of 
+# data we are going to use. In my implementation, I have a try to 
+# pre-load 8 elements in one time. If rest of length is less than 8
+# , it changes to pre-load 4 elements. And less than 4, changes to 
+# 2, then 2 to 1. At the end of this rule, we finally copy all of 
+# the elements in source.
+# Third, I find that we can directly 'jxx' after an alu-inst, so I 
+# remove some unnecessary 'andq'. Then I find that it could jump to
+# next kind number of pre-load elements after copy a number which 
+# is less than 8. Basing on this idea, the structure was further 
+# optimized.
+# Current CPE is 8.17, which is far away from 60 pts. Once I have 
+# any development before deadline, I will commit in time.
+# This file includes all versions of my implementation, besides the
+# origin code is within it as well.
+# What's more, 'check-len.pl' runs badly in my working environment,
+# if the latest version fails to pass it, I wish TA to accept the 
+# one who have highest grade in the rest of versions. Thanks.
+#
+# regard of CPE
+# # origin								# 15.18
+# # introduce 'iaddq' and load imm-		
+#   -ediate number beforehand such as 
+#   $1 and $8							# 12.84
+# # subq can be replaced by add a neg-	
+# 	-ative number, and preload of imm-
+#   -ediate number can be removed		# 12.70
+# # tempted to unroll the loop			# 9.16
+# # unroll loop plus					# 8.90
+# # remove some unnecessary 'andq' and
+# 	handle the bug that 4,2,1 element
+#	jump to loop after copy				# 8.17
+##################################################################
+# Do not modify this portion
+# Function prologue.
+# %rdi = src, %rsi = dst, %rdx = len
+ncopy:
+
+##################################################################
+# You can modify this portion
+
+# VERSION 5 CPE 8.17
+	xorq %rax, %rax			# count = 0;
+	andq %rdx, %rdx			# initial check len <= 0?
+	jle Done				
+judgeLen88:
+	iaddq $-8, %rdx			# len - 8
+	jge copyLen8			# len >= 8
+judgeLen84:
+	iaddq $4, %rdx			# len - 4
+	jge copyLen4			# len >= 4
+judgeLen82:
+	iaddq $2, %rdx			# len - 2
+	jge copyLen2			# len == 2 or 3
+judgeLen80:
+	iaddq $1, %rdx			# len - 1
+	jge	copyLen1			# len == 1
+	ret						# len <= 0, goto Done:
+copyLen8:
+	mrmovq 0x00(%rdi), %rbx # following ops is to load val
+	mrmovq 0x08(%rdi), %r8	# from src and store it to dst
+	mrmovq 0x10(%rdi), %r9
+	mrmovq 0x18(%rdi), %r10
+Npos80:
+	andq %rbx, %rbx			# val[0] <= 0?
+	mrmovq 0x20(%rdi), %r11
+	mrmovq 0x28(%rdi), %r12
+	mrmovq 0x30(%rdi), %r13
+	mrmovq 0x38(%rdi), %r14
+	jle Npos81				# if so, goto Npos81
+	iaddq $1, %rax			# count++
+Npos81:
+	andq %r8, %r8			# val[1] <= 0?
+	rmmovq %rbx, 0x00(%rsi)
+	rmmovq %r8 , 0x08(%rsi)
+	rmmovq %r9 , 0x10(%rsi)
+	rmmovq %r10, 0x18(%rsi)
+	jle Npos82				# if so, goto Npos82
+	iaddq $1, %rax			# count++
+Npos82:
+	andq %r9, %r9 			# val[2] <= 0?
+	rmmovq %r11, 0x20(%rsi)
+	rmmovq %r12, 0x28(%rsi)
+	rmmovq %r13, 0x30(%rsi)
+	rmmovq %r14, 0x38(%rsi)
+	jle Npos83				# if so, goto Npos83
+	iaddq $1, %rax			# count++
+Npos83:
+	andq %r10, %r10			# val[3] <= 0?
+	jle Npos84				# if so, goto Npos84
+	iaddq $1, %rax			# count++
+Npos84:
+	andq %r11, %r11			# val[4] <= 0?
+	jle Npos85				# if so, goto Npos85
+	iaddq $1, %rax			# count++
+Npos85:
+	andq %r12, %r12			# val[5] <= 0?
+	jle Npos86				# if so, goto Npos86
+	iaddq $1, %rax			# count++
+Npos86:
+	andq %r13, %r13 		# val[6] <= 0?
+	jle Npos87				# if so, goto Npos87
+	iaddq $1, %rax			# count++
+Npos87:
+	andq %r14, %r14			# val[7] <= 0?
+	jle posAdd8				# if so, ptr_pos add 8
+	iaddq $1, %rax			# count++
+posAdd8:
+	iaddq $0x40, %rdi		# src += 8
+	iaddq $0x40, %rsi		# der += 8
+	jmp judgeLen88			# loop
+# copy the last n (n < 8) elements
+copyLen4:
+	mrmovq 0x00(%rdi), %rbx # following ops is to load val
+	mrmovq 0x08(%rdi), %r8	# from src and store it to dst
+	mrmovq 0x10(%rdi), %r9
+	mrmovq 0x18(%rdi), %r10
+	andq %rbx, %rbx			# val[0] <= 0?
+	rmmovq %rbx, 0x00(%rsi)
+	rmmovq %r8 , 0x08(%rsi)
+	rmmovq %r9, 0x10(%rsi)
+	rmmovq %r10, 0x18(%rsi)
+Npos40:
+	jle Npos41				# if so, goto Npos41
+	iaddq $1, %rax			# count++
+Npos41:
+	andq %r8, %r8			# val[1] <= 0?
+	jle Npos42				# if so, goto Npos42
+	iaddq $1, %rax			# count++
+Npos42:
+	andq %r9, %r9 			# val[2] <= 0?
+	jle Npos43				# if so, goto Npos43
+	iaddq $1, %rax			# count++
+Npos43:
+	andq %r10, %r10			# val[3] <= 0?
+	jle posAdd4				# if so, ptr_pos add 4
+	iaddq $1, %rax			# count++
+posAdd4:
+	iaddq $0x20, %rdi		# src += 4
+	iaddq $0x20, %rsi		# der += 4
+judgeLen22:
+	iaddq $-2, %rdx			# len - 2
+	jge copyLen2			# len == 2 or 3
+judgeLen20:
+	iaddq $1, %rdx			# len - 1
+	jge	copyLen1			# len == 1
+	ret						# len <= 0, goto Done:
+copyLen2:
+	mrmovq 0x00(%rdi), %rbx # following ops is to load val
+	mrmovq 0x08(%rdi), %r8	# from src and store it to dst
+	rmmovq %rbx, 0x00(%rsi)
+	andq %rbx, %rbx			# val[0] <= 0?
+	rmmovq %r8 , 0x08(%rsi)
+Npos20:
+	jle Npos21				# if so, goto Npos21
+	iaddq $1, %rax			# count++
+Npos21:
+	andq %r8, %r8			# val[1] <= 0?
+	jle posAdd2				# if so, ptr_pos add 2
+	iaddq $1, %rax			# count++
+posAdd2:
+	iaddq 0x10, %rdi		# src += 2
+	iaddq 0x10, %rsi		# det += 2
+judgeLen00:
+	iaddq $-1, %rdx			# len - 1
+	jl Done					# len <= 0, goto Done:
+copyLen1:
+	mrmovq (%rdi), %rbx		# read val from src...
+	andq %rbx, %rbx			# val[0] <= 0?
+	rmmovq %rbx, (%rsi)		# ...and store it to dst
+Npos10:
+	jle Done				# if so, ptr_pos add 1
+	iaddq $1, %rax			# count++
+	# After this step, len is 0, we needn't to do rest work
+# posAdd1:
+	# iaddq 0x08, %rdi
+  	# iaddq 0x08, %rsi
+	
+# VERSION 4 CPE 8.90
+# 	xorq %rax, %rax			# count = 0;
+# 	andq %rdx, %rdx			# initial check len <= 0?
+# 	jle Done				
+# judgeLen88:
+# 	iaddq $-8, %rdx			# len - 8
+# 	jge copyLen8			# len >= 8
+# judgeLen84:
+# 	iaddq $4, %rdx			# len - 4
+# 	jge copyLen4			# len >= 4
+# judgeLen82:
+# 	iaddq $2, %rdx			# len - 2
+# 	jge copyLen2			# len == 2 or 3
+# judgeLen80:
+# 	iaddq $1, %rdx			# len - 1
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jge	copyLen1			# len == 1
+# 	ret						# len <= 0, goto Done:
+# judgeLen44:
+# 	iaddq $-4, %rdx			# len - 4
+# 	jge copyLen4			# len >= 4
+# judgeLen42:
+# 	iaddq $2, %rdx			# len - 2
+# 	jge copyLen2			# len == 2 or 3
+# judgeLen40:
+# 	iaddq $1, %rdx			# len - 1
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jge	copyLen1			# len == 1
+# 	ret						# len <= 0, goto Done:
+# judgeLen22:
+# 	iaddq $-2, %rdx			# len - 2
+# 	jge copyLen2			# len == 2
+# judgeLen20:
+# 	iaddq $1, %rdx			# len - 1
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jge	copyLen1			# len == 1
+# 	ret						# len <= 0, goto Done:
+# judgeLen00:
+# 	iaddq $-1, %rdx			# len - 1
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jge	copyLen1			# len == 1
+# 	ret						# len <= 0, goto Done:
+# copyLen8:
+# 	mrmovq 0x00(%rdi), %rbx # following ops is to load val
+# 	mrmovq 0x08(%rdi), %r8	# from src and store it to dst
+# 	mrmovq 0x10(%rdi), %r9
+# 	mrmovq 0x18(%rdi), %r10
+# 	mrmovq 0x20(%rdi), %r11
+# 	mrmovq 0x28(%rdi), %r12
+# 	mrmovq 0x30(%rdi), %r13
+# 	mrmovq 0x38(%rdi), %r14
+# 	rmmovq %rbx, 0x00(%rsi)
+# 	rmmovq %r8 , 0x08(%rsi)
+# 	rmmovq %r9 , 0x10(%rsi)
+# 	rmmovq %r10, 0x18(%rsi)
+# 	rmmovq %r11, 0x20(%rsi)
+# 	rmmovq %r12, 0x28(%rsi)
+# 	rmmovq %r13, 0x30(%rsi)
+# 	rmmovq %r14, 0x38(%rsi)
+# Npos80:
+# 	andq %rbx, %rbx			# val[0] <= 0?
+# 	jle Npos81				# if so, goto Npos81
+# 	iaddq $1, %rax			# count++
+# Npos81:
+# 	andq %r8, %r8			# val[1] <= 0?
+# 	jle Npos82				# if so, goto Npos82
+# 	iaddq $1, %rax			# count++
+# Npos82:
+# 	andq %r9, %r9 			# val[2] <= 0?
+# 	jle Npos83				# if so, goto Npos83
+# 	iaddq $1, %rax			# count++
+# Npos83:
+# 	andq %r10, %r10			# val[3] <= 0?
+# 	jle Npos84				# if so, goto Npos84
+# 	iaddq $1, %rax			# count++
+# Npos84:
+# 	andq %r11, %r11			# val[4] <= 0?
+# 	jle Npos85				# if so, goto Npos85
+# 	iaddq $1, %rax			# count++
+# Npos85:
+# 	andq %r12, %r12			# val[5] <= 0?
+# 	jle Npos86				# if so, goto Npos86
+# 	iaddq $1, %rax			# count++
+# Npos86:
+# 	andq %r13, %r13 		# val[6] <= 0?
+# 	jle Npos87				# if so, goto Npos87
+# 	iaddq $1, %rax			# count++
+# Npos87:
+# 	andq %r14, %r14			# val[7] <= 0?
+# 	jle posAdd8				# if so, ptr_pos add 8
+# 	iaddq $1, %rax			# count++
+# posAdd8:
+# 	iaddq $0x40, %rdi		# src += 8
+# 	iaddq $0x40, %rsi		# der += 8
+# 	jmp judgeLen88			# loop
+# copyLen4:
+# 	mrmovq 0x00(%rdi), %rbx # following ops is to load val
+# 	mrmovq 0x08(%rdi), %r8	# from src and store it to dst
+# 	mrmovq 0x10(%rdi), %r9
+# 	mrmovq 0x18(%rdi), %r10
+# 	rmmovq %rbx, 0x00(%rsi)
+# 	rmmovq %r8 , 0x08(%rsi)
+# 	rmmovq %r9, 0x10(%rsi)
+# 	rmmovq %r10, 0x18(%rsi)
+# Npos40:
+# 	andq %rbx, %rbx			# val[0] <= 0?
+# 	jle Npos41				# if so, goto Npos41
+# 	iaddq $1, %rax			# count++
+# Npos41:
+# 	andq %r8, %r8			# val[1] <= 0?
+# 	jle Npos42				# if so, goto Npos42
+# 	iaddq $1, %rax			# count++
+# Npos42:
+# 	andq %r9, %r9 			# val[2] <= 0?
+# 	jle Npos43				# if so, goto Npos43
+# 	iaddq $1, %rax			# count++
+# Npos43:
+# 	andq %r10, %r10			# val[3] <= 0?
+# 	jle posAdd4				# if so, ptr_pos add 4
+# 	iaddq $1, %rax			# count++
+# posAdd4:
+# 	iaddq $0x20, %rdi		# src += 4
+# 	iaddq $0x20, %rsi		# der += 4
+# 	jmp judgeLen44			# loop
+# copyLen2:
+# 	mrmovq 0x00(%rdi), %rbx # following ops is to load val
+# 	mrmovq 0x08(%rdi), %r8	# from src and store it to dst
+# 	rmmovq %rbx, 0x00(%rsi)
+# 	rmmovq %r8 , 0x08(%rsi)
+# Npos20:
+# 	andq %rbx, %rbx			# val[0] <= 0?
+# 	jle Npos21				# if so, goto Npos21
+# 	iaddq $1, %rax			# count++
+# Npos21:
+# 	andq %r8, %r8			# val[1] <= 0?
+# 	jle posAdd2				# if so, ptr_pos add 2
+# 	iaddq $1, %rax			# count++
+# posAdd2:
+# 	iaddq 0x10, %rdi		# src += 2
+# 	iaddq 0x10, %rsi		# det += 2
+# 	jmp judgeLen22			# loop
+# copyLen1:
+# 	mrmovq (%rdi), %rbx		# read val from src...
+# 	rmmovq %rbx, (%rsi)		# ...and store it to dst
+# Npos10:
+# 	andq %rbx, %rbx			# val[0] <= 0?
+# 	jle posAdd1				# if so, ptr_pos add 1
+# 	iaddq $1, %rax			# count++
+# posAdd1:
+# 	iaddq 0x08, %rdi		# src += 1
+# 	iaddq 0x08, %rsi		# dst += 1
+# 	jmp judgeLen00			# loop
+
+# VERSION 3 CPE 9.16
+# 	xorq %rax, %rax			# count = 0;
+# 	andq %rdi, %rdi			# initial check
+# 	jle Done
+# judgeLen44:
+# 	iaddq $-4, %rdx			# len - 4
+# 	jge copyLen4			# len >= 4
+# judgeLen42:
+# 	iaddq $2, %rdx			# len - 2
+# 	jge copyLen2			# len == 2 or 3
+# judgeLen40:
+# 	iaddq $1, %rdx			# len - 1
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jge	copyLen1			# len == 1
+# 	jmp Done				# len <= 0, goto Done:
+# judgeLen22:
+# 	iaddq $-2, %rdx			# len - 2
+# 	jge copyLen2			# len == 2
+# judgeLen20:
+# 	iaddq $1, %rdx			# len - 1
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jge	copyLen1			# len == 1
+# 	jmp Done				# len <= 0, goto Done:
+# judgeLen00:
+# 	iaddq $-1, %rdx			# len - 1
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jge	copyLen1			# len == 1
+# 	jmp Done				# len <= 0, goto Done:
+# copyLen4:
+# 	mrmovq 0x00(%rdi), %rbx # following ops is to load val
+# 	mrmovq 0x08(%rdi), %r8	# from src and store it to dst
+# 	mrmovq 0x10(%rdi), %r9
+# 	mrmovq 0x18(%rdi), %r10
+# 	rmmovq %rbx, 0x00(%rsi)
+# 	rmmovq %r8 , 0x08(%rsi)
+# 	rmmovq %r9, 0x10(%rsi)
+# 	rmmovq %r10, 0x18(%rsi)
+# Npos40:
+# 	andq %rbx, %rbx			# val[0] <= 0?
+# 	jle Npos41				# if so, goto Npos41
+# 	iaddq $1, %rax			# count++
+# Npos41:
+# 	andq %r8, %r8			# val[1] <= 0?
+# 	jle Npos42				# if so, goto Npos42
+# 	iaddq $1, %rax			# count++
+# Npos42:
+# 	andq %r9, %r9 			# val[2] <= 0?
+# 	jle Npos43				# if so, goto Npos43
+# 	iaddq $1, %rax			# count++
+# Npos43:
+# 	andq %r10, %r10			# val[3] <= 0?
+# 	jle posAdd4				# if so, ptr_pos add 4
+# 	iaddq $1, %rax			# count++
+# posAdd4:
+# 	iaddq $0x20, %rdi		# src += 4
+# 	iaddq $0x20, %rsi		# der += 4
+# 	jmp judgeLen44			# loop
+# copyLen2:
+# 	mrmovq 0x00(%rdi), %rbx # following ops is to load val
+# 	mrmovq 0x08(%rdi), %r8	# from src and store it to dst
+# 	rmmovq %rbx, 0x00(%rsi)
+# 	rmmovq %r8 , 0x08(%rsi)
+# Npos20:
+# 	andq %rbx, %rbx			# val[0] <= 0?
+# 	jle Npos21				# if so, goto Npos21
+# 	iaddq $1, %rax			# count++
+# Npos21:
+# 	andq %r8, %r8			# val[1] <= 0?
+# 	jle posAdd2				# if so, ptr_pos add 2
+# 	iaddq $1, %rax			# count++
+# posAdd2:
+# 	iaddq 0x10, %rdi		# src += 2
+# 	iaddq 0x10, %rsi		# det += 2
+# 	jmp judgeLen22			# loop
+# copyLen1:
+# 	mrmovq (%rdi), %rbx		# read val from src...
+# 	rmmovq %rbx, (%rsi)		# ...and store it to dst
+# Npos10:
+# 	andq %rbx, %rbx			# val[0] <= 0?
+# 	jle posAdd1				# if so, ptr_pos add 1
+# 	iaddq $1, %rax			# count++
+# posAdd1:
+# 	iaddq 0x08, %rdi		# src += 1
+# 	iaddq 0x08, %rsi		# dst += 1
+# 	jmp judgeLen00			# loop
+
+# VERSION 2 CPE 12.70
+# 	xorq %rax,%rax			# count = 0;
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jle Done				# if so, goto Done:
+
+# Loop:	
+# 	mrmovq (%rdi), %r10		# read val from src...
+# 	rmmovq %r10, (%rsi)		# ...and store it to dst
+# 	andq %r10, %r10			# val <= 0?
+# 	jle Npos				# if so, goto Npos:
+# 	iaddq $1, %rax			# count++
+# Npos:
+# 	iaddq $-1, %rdx			# len--
+# 	iaddq $8, %rdi			# src++
+# 	iaddq $8, %rsi			# dst++
+# 	andq %rdx,%rdx			# len > 0?
+# 	jg Loop					# if so, goto Loop:
+
+# VERSION 1 CPE 12.84
+# 	irmovq $1, %r9
+# 	irmovq $8, %r8			# Constant predefine
+# 	xorq %rax,%rax			# count = 0;
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jle Done				# if so, goto Done:
+
+# Loop:	
+# 	mrmovq (%rdi), %r10		# read val from src...
+# 	rmmovq %r10, (%rsi)		# ...and store it to dst
+# 	andq %r10, %r10			# val <= 0?
+# 	jle Npos				# if so, goto Npos:
+# 	iaddq $1, %rax			# count++
+# Npos:
+# 	subq %r9, %rdx			# len--
+# 	iaddq $8, %rdi			# src++
+# 	iaddq $8, %rsi			# dst++
+# 	andq %rdx,%rdx			# len > 0?
+# 	jg Loop					# if so, goto Loop:
+
+# VERSION 0 CPE 15.18
+# 	xorq %rax,%rax			# count = 0;
+# 	andq %rdx,%rdx			# len <= 0?
+# 	jle Done				# if so, goto Done:
+
+# Loop:	
+# 	mrmovq (%rdi), %r10		# read val from src...
+# 	rmmovq %r10, (%rsi)		# ...and store it to dst
+# 	andq %r10, %r10			# val <= 0?
+# 	jle Npos				# if so, goto Npos:
+# 	irmovq $1, %r10
+# 	addq %r10, %rax			# count++
+# Npos:	
+# 	irmovq $1, %r10
+# 	subq %r10, %rdx			# len--
+# 	irmovq $8, %r10
+# 	addq %r10, %rdi			# src++
+# 	addq %r10, %rsi			# dst++
+# 	andq %rdx,%rdx			# len > 0?
+# 	jg Loop					# if so, goto Loop:
+
+##################################################################
+# Do not modify the following section of code
+# Function epilogue.
+Done:
+	ret
+##################################################################
+# Keep the following label at the end of your function
+End:
+#/* $end ncopy-ys */

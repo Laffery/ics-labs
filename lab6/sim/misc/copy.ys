@@ -1,0 +1,46 @@
+# Execution begins at address 0
+    .pos 0
+    irmovq stack, %rsp      # Set up stack pointer
+    call main               # Execute main program
+    halt                    # Terminate program
+
+.align 8
+# Source block
+src:
+    .quad 0x00a
+    .quad 0x0b0
+    .quad 0xc00
+# Destination block
+dest:
+    .quad 0x111
+    .quad 0x222
+    .quad 0x333
+
+main:
+    irmovq src, %rdi        # long *src
+    irmovq dest, %rsi       # long *dest
+    irmovq $3, %rdx         # long len
+    call copy_block         # Call function of my implementation
+    ret
+
+# copy_block - Copy src to dest and return xor checksum of src
+copy_block:
+    irmovq $8, %r8          # Constant 8
+    irmovq $1, %r9          # Constant 1
+    xorq %rax, %rax         # result = 0
+    jmp test                # Goto test
+loop:
+    mrmovq (%rdi), %rbx     # val = *src
+    rmmovq %rbx, (%rsi)     # *dest = val
+    addq %r8, %rdi          # src++
+    addq %r8, %rsi          # dest++
+    xorq %rbx, %rax         # result ^= val
+    subq %r9, %rdx          # len--
+test:
+    andq %rdx, %rdx         # Set CC
+    jne loop
+    ret
+
+# Stack starts here and grows to lower address
+    .pos 0x200
+stack:
